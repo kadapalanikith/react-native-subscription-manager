@@ -6,7 +6,7 @@ export default function Index() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/");
+    router.replace("/(tabs)");
   }, [router]);
 
   return (
