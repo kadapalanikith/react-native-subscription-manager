@@ -1,4 +1,4 @@
-import { tabs } from "@/data";
+import { tabs } from "@/constants/data";
 import { Tabs } from "expo-router";
 import { View } from "react-native";
 import clsx from "clsx";
