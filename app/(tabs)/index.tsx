@@ -33,7 +33,7 @@ export default function App() {
                 <Image source={images.avatar} className="home-avatar" />
                 <Text className="home-user-name">{Home_USER.name}</Text>
               </View>
-              <Image source={icons.add} className="home-add-icons"></Image>
+              <Image source={icons.add} className="home-add-icon"></Image>
             </View>
 
             <View className="home-balance-card">
@@ -60,16 +60,15 @@ export default function App() {
                 showsHorizontalScrollIndicator={false}
                 ListEmptyComponent={
                   <Text className="home-empty-state">
-                    No upcomming renewals yet.
+                    No upcoming renewals yet.
                   </Text>
                 }
               />
             </View>
 
-            <ListHeading title="All Subscription" />
+            <ListHeading title="All Subscriptions" />
           </>
         )}
-
         data={HOME_SUBSCRIPTIONS}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (

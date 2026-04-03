@@ -1,3 +1,1 @@
-export const Home_USER = {
-  name: "Pokodi",
-};
+export { HOME_USER as Home_USER } from "./data";

@@ -1,15 +1,15 @@
-import { View, Text, TouchableOpacity } from 'react-native'
-import React from 'react'
+import React from "react";
+import { Text, TouchableOpacity, View } from "react-native";
 
-const ListHeading = ({ title }:ListHeadingProps) => {
+const ListHeading = ({ title, onViewAllPress }: ListHeadingProps) => {
   return (
-    <View className='list-head'>
-          <Text className='list-title'>{title}</Text>
-          <TouchableOpacity className='list-action'>
-              <Text className='list-action-text'>View All</Text>
-          </TouchableOpacity>
+    <View className="list-head">
+      <Text className="list-title">{title}</Text>
+      <TouchableOpacity onPress={onViewAllPress} className="list-action">
+        <Text className="list-action-text">View All</Text>
+      </TouchableOpacity>
     </View>
-  )
-}
+  );
+};
 
-export default ListHeading
+export default ListHeading;
