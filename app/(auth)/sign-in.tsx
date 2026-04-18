@@ -1,4 +1,4 @@
-import { useSignIn } from "@clerk/expo";
+import { useSignIn, useAuth } from "@clerk/expo";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -11,50 +11,54 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
+import { styled } from "nativewind";
+
+const SafeAreaView = styled(RNSafeAreaView);
 
 export default function SignInScreen() {
-  const { signIn, errors, fetchStatus, isLoaded } = useSignIn();
+  const { isLoaded } = useAuth();
+  const { signIn } = useSignIn();
   const router = useRouter();
 
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState("");
+  const [isPending, setIsPending] = useState(false);
 
   const onSignInPress = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded || !signIn) return;
     setLocalError("");
+    setIsPending(true);
 
     try {
-      const { error, status } = await signIn.password({
+      const { error } = await signIn.password({
         emailAddress,
         password,
       });
 
       if (error) {
-        setLocalError(error.longMessage || "An error occurred during sign in.");
+        setLocalError(
+          error.longMessage || 
+          error.message ||
+          "An error occurred during sign in."
+        );
         return;
       }
 
-      if (status === "complete") {
+      if (signIn.status === "complete") {
         await signIn.finalize({
-          // If no session tasks, navigate the signed-in user to the home page
-          navigate: ({ session, decorateUrl }) => {
-            if (session?.currentTask) {
-              console.log(session?.currentTask);
-              return;
-            }
-            router.replace("/(tabs)");
-          },
+          navigate: () => router.replace("/(tabs)"),
         });
       } else {
-        console.error("Sign-in attempt not complete:", signIn);
+        setLocalError("Sign-in attempt not complete. Please check your credentials or contact support.");
       }
     } catch (err: any) {
-      console.error(err);
       setLocalError(
-        err?.errors?.[0]?.longMessage || "Invalid email or password."
+        err?.errors?.[0]?.longMessage || err?.message || "Invalid email or password."
       );
+    } finally {
+      setIsPending(false);
     }
   };
 
@@ -94,9 +98,8 @@ export default function SignInScreen() {
                 <View className="auth-field">
                   <Text className="auth-label">Email address</Text>
                   <TextInput
-                    className={`auth-input ${
-                      localError || errors?.fields?.identifier ? "auth-input-error" : ""
-                    }`}
+                    className={`auth-input ${localError ? "auth-input-error" : ""
+                      }`}
                     autoCapitalize="none"
                     value={emailAddress}
                     placeholder="Enter your email"
@@ -106,21 +109,15 @@ export default function SignInScreen() {
                       setLocalError("");
                     }}
                     keyboardType="email-address"
-                    editable={fetchStatus !== "fetching"}
+                    editable={!isPending}
                   />
-                  {errors?.fields?.identifier && (
-                    <Text className="auth-error">
-                      {errors.fields.identifier.message}
-                    </Text>
-                  )}
                 </View>
 
                 <View className="auth-field">
                   <Text className="auth-label">Password</Text>
                   <TextInput
-                    className={`auth-input ${
-                      localError || errors?.fields?.password ? "auth-input-error" : ""
-                    }`}
+                    className={`auth-input ${localError ? "auth-input-error" : ""
+                      }`}
                     value={password}
                     placeholder="Enter your password"
                     placeholderTextColor="rgba(0, 0, 0, 0.4)"
@@ -129,13 +126,8 @@ export default function SignInScreen() {
                       setPassword(text);
                       setLocalError("");
                     }}
-                    editable={fetchStatus !== "fetching"}
+                    editable={!isPending}
                   />
-                  {errors?.fields?.password && (
-                    <Text className="auth-error">
-                      {errors.fields.password.message}
-                    </Text>
-                  )}
                 </View>
 
                 {localError ? (
@@ -145,15 +137,14 @@ export default function SignInScreen() {
                 ) : null}
 
                 <Pressable
-                  className={`auth-button ${
-                    !emailAddress || !password || fetchStatus === "fetching"
+                  className={`auth-button ${!emailAddress || !password || isPending
                       ? "auth-button-disabled"
                       : ""
-                  }`}
+                    }`}
                   onPress={onSignInPress}
-                  disabled={!emailAddress || !password || fetchStatus === "fetching"}
+                  disabled={!emailAddress || !password || isPending}
                 >
-                  {fetchStatus === "fetching" ? (
+                  {isPending ? (
                     <ActivityIndicator color="#081126" />
                   ) : (
                     <Text className="auth-button-text">Sign In</Text>

@@ -1,4 +1,4 @@
-import { useSignUp } from "@clerk/expo";
+import { useSignUp, useAuth } from "@clerk/expo";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -11,20 +11,29 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
+import { styled } from "nativewind";
+
+const SafeAreaView = styled(RNSafeAreaView);
 
 export default function SignUpScreen() {
-  const { isLoaded, signUp, errors, fetchStatus } = useSignUp();
+  const { isLoaded } = useAuth();
+  const { signUp } = useSignUp();
   const router = useRouter();
 
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [localError, setLocalError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [isResending, setIsResending] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+  const [pendingVerification, setPendingVerification] = useState(false);
 
   const onSignUpPress = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded || !signUp) return;
     setLocalError("");
+    setIsPending(true);
 
     try {
       const { error } = await signUp.password({
@@ -33,22 +42,29 @@ export default function SignUpScreen() {
       });
 
       if (error) {
-        setLocalError(error.longMessage || "An error occurred.");
+        setLocalError(
+          error.longMessage || 
+          error.message || 
+          "An error occurred during sign up."
+        );
         return;
       }
 
       await signUp.verifications.sendEmailCode();
+      setPendingVerification(true);
     } catch (err: any) {
-      console.error(err);
       setLocalError(
-        err?.errors?.[0]?.longMessage || "Error creating account."
+        err?.errors?.[0]?.longMessage || err?.message || "Error creating account."
       );
+    } finally {
+      setIsPending(false);
     }
   };
 
   const onPressVerify = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded || !signUp) return;
     setLocalError("");
+    setIsPending(true);
 
     try {
       await signUp.verifications.verifyEmailCode({
@@ -57,27 +73,19 @@ export default function SignUpScreen() {
 
       if (signUp.status === "complete") {
         await signUp.finalize({
-          navigate: ({ session, decorateUrl }) => {
-            if (session?.currentTask) {
-              console.log(session?.currentTask);
-              return;
-            }
-            router.replace("/(tabs)");
-          },
+          navigate: () => router.replace("/(tabs)"),
         });
       } else {
-        console.error("Sign-up attempt not complete:", signUp);
+        setLocalError("Sign-up attempt not complete. Please check your details or contact support.");
       }
     } catch (err: any) {
-      console.error(err);
-      setLocalError(err?.errors?.[0]?.longMessage || "Incorrect code.");
+      setLocalError(err?.errors?.[0]?.longMessage || err?.message || "Incorrect code.");
+    } finally {
+      setIsPending(false);
     }
   };
 
-  const isVerifying =
-    signUp?.status === "missing_requirements" &&
-    signUp?.unverifiedFields.includes("email_address") &&
-    signUp?.missingFields.length === 0;
+  const isVerifying = pendingVerification;
 
   return (
     <SafeAreaView className="auth-safe-area" edges={["top", "bottom"]}>
@@ -115,9 +123,8 @@ export default function SignUpScreen() {
                     <View className="auth-field">
                       <Text className="auth-label">Verification Code</Text>
                       <TextInput
-                        className={`auth-input ${
-                          localError || errors?.fields?.code ? "auth-input-error" : ""
-                        }`}
+                        className={`auth-input ${localError ? "auth-input-error" : ""
+                          }`}
                         value={code}
                         placeholder="Enter code"
                         placeholderTextColor="rgba(0, 0, 0, 0.4)"
@@ -126,13 +133,8 @@ export default function SignUpScreen() {
                           setCode(text);
                           setLocalError("");
                         }}
-                        editable={fetchStatus !== "fetching"}
+                        editable={!isPending}
                       />
-                      {errors?.fields?.code && (
-                        <Text className="auth-error">
-                          {errors.fields.code.message}
-                        </Text>
-                      )}
                     </View>
 
                     {localError ? (
@@ -141,14 +143,19 @@ export default function SignUpScreen() {
                       </Text>
                     ) : null}
 
+                    {successMessage ? (
+                      <Text className="text-green-600 text-center mt-1">
+                        {successMessage}
+                      </Text>
+                    ) : null}
+
                     <Pressable
-                      className={`auth-button ${
-                        !code || fetchStatus === "fetching" ? "auth-button-disabled" : ""
-                      }`}
+                      className={`auth-button ${!code || isPending ? "auth-button-disabled" : ""
+                        }`}
                       onPress={onPressVerify}
-                      disabled={!code || fetchStatus === "fetching"}
+                      disabled={!code || isPending}
                     >
-                      {fetchStatus === "fetching" ? (
+                      {isPending ? (
                         <ActivityIndicator color="#081126" />
                       ) : (
                         <Text className="auth-button-text">Verify</Text>
@@ -156,13 +163,32 @@ export default function SignUpScreen() {
                     </Pressable>
 
                     <Pressable
-                      className="auth-secondary-button mt-2"
-                      onPress={() => signUp?.verifications.sendEmailCode()}
+                      className={`auth-secondary-button mt-4 ${isResending || isPending ? "opacity-50" : ""
+                        }`}
+                      disabled={isResending || isPending}
+                      onPress={async () => {
+                        try {
+                          setIsResending(true);
+                          setLocalError("");
+                          setSuccessMessage("");
+                          await signUp.verifications.sendEmailCode();
+                          setSuccessMessage("Verification code resent");
+                        } catch (err: any) {
+                          setLocalError(err?.errors?.[0]?.longMessage || err?.message || "Failed to resend code.");
+                        } finally {
+                          setIsResending(false);
+                        }
+                      }}
                     >
-                      <Text className="auth-secondary-button-text">
-                        Resend Code
-                      </Text>
+                      {isResending ? (
+                        <ActivityIndicator size="small" color="#081126" />
+                      ) : (
+                        <Text className="auth-secondary-button-text">
+                          Resend Code
+                        </Text>
+                      )}
                     </Pressable>
+
                   </View>
                 </View>
               </View>
@@ -178,9 +204,8 @@ export default function SignUpScreen() {
                     <View className="auth-field">
                       <Text className="auth-label">Email address</Text>
                       <TextInput
-                        className={`auth-input ${
-                          localError || errors?.fields?.emailAddress ? "auth-input-error" : ""
-                        }`}
+                        className={`auth-input ${localError ? "auth-input-error" : ""
+                          }`}
                         autoCapitalize="none"
                         value={emailAddress}
                         placeholder="Enter your email"
@@ -190,21 +215,15 @@ export default function SignUpScreen() {
                           setLocalError("");
                         }}
                         keyboardType="email-address"
-                        editable={fetchStatus !== "fetching"}
+                        editable={!isPending}
                       />
-                      {errors?.fields?.emailAddress && (
-                        <Text className="auth-error">
-                          {errors.fields.emailAddress.message}
-                        </Text>
-                      )}
                     </View>
 
                     <View className="auth-field">
                       <Text className="auth-label">Password</Text>
                       <TextInput
-                        className={`auth-input ${
-                          localError || errors?.fields?.password ? "auth-input-error" : ""
-                        }`}
+                        className={`auth-input ${localError ? "auth-input-error" : ""
+                          }`}
                         value={password}
                         placeholder="Create a secure password"
                         placeholderTextColor="rgba(0, 0, 0, 0.4)"
@@ -213,13 +232,8 @@ export default function SignUpScreen() {
                           setPassword(text);
                           setLocalError("");
                         }}
-                        editable={fetchStatus !== "fetching"}
+                        editable={!isPending}
                       />
-                      {errors?.fields?.password && (
-                        <Text className="auth-error">
-                          {errors.fields.password.message}
-                        </Text>
-                      )}
                     </View>
 
                     {localError ? (
@@ -229,15 +243,14 @@ export default function SignUpScreen() {
                     ) : null}
 
                     <Pressable
-                      className={`auth-button ${
-                        !emailAddress || !password || fetchStatus === "fetching"
+                      className={`auth-button ${!emailAddress || !password || isPending
                           ? "auth-button-disabled"
                           : ""
-                      }`}
+                        }`}
                       onPress={onSignUpPress}
-                      disabled={!emailAddress || !password || fetchStatus === "fetching"}
+                      disabled={!emailAddress || !password || isPending}
                     >
-                      {fetchStatus === "fetching" ? (
+                      {isPending ? (
                         <ActivityIndicator color="#081126" />
                       ) : (
                         <Text className="auth-button-text">Sign Up</Text>
